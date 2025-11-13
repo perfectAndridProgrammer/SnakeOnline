@@ -91,11 +91,28 @@ export default function GameScene() {
     
     updatePlayerSnake(newPlayerSnake);
     
-    // Update AI snakes
+    // Update AI snakes and collect pellets
+    const aiCollectedPellets: string[] = [];
     const updatedAI = aiSnakes.map((aiSnake) => {
       const updated = updateAISnake(aiSnake, delta, pellets, mapSize, newPlayerSnake, aiSnakes);
-      const { snake: finalSnake } = checkPelletCollisions(updated, pellets);
+      const { snake: finalSnake, collectedPellets: aiPellets } = checkPelletCollisions(updated, pellets);
+      aiCollectedPellets.push(...aiPellets);
       return finalSnake;
+    });
+    
+    // Remove AI collected pellets and spawn new ones
+    aiCollectedPellets.forEach((pelletId) => {
+      removePellet(pelletId);
+      addPellet({
+        id: `pellet-${Date.now()}-${Math.random()}`,
+        position: new THREE.Vector3(
+          (Math.random() - 0.5) * mapSize,
+          0,
+          (Math.random() - 0.5) * mapSize
+        ),
+        color: getRandomColor(),
+        size: 0.3,
+      });
     });
     
     updateAISnakes(updatedAI);
