@@ -12,9 +12,10 @@ export default function Game() {
       {phase === "playing" && (
         <>
           <Canvas
+            orthographic
             camera={{
-              position: [0, 30, 30],
-              fov: 50,
+              position: [0, 50, 0],
+              zoom: 8,
               near: 0.1,
               far: 1000
             }}

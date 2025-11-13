@@ -35,14 +35,14 @@ interface SnakeGameState {
   aiSnakes: Snake[];
   pellets: Pellet[];
   mapSize: number;
-  mousePosition: THREE.Vector2;
+  mouseWorldPosition: { x: number; z: number };
   cameraZoom: number;
   
   // Actions
   startGame: () => void;
   endGame: () => void;
   restartGame: () => void;
-  updateMousePosition: (x: number, y: number) => void;
+  updateMousePosition: (x: number, z: number) => void;
   updatePlayerSnake: (snake: Snake) => void;
   updateAISnakes: (snakes: Snake[]) => void;
   updatePellets: (pellets: Pellet[]) => void;
@@ -80,7 +80,7 @@ const createSnake = (id: string, name: string, startX: number, startZ: number): 
     id,
     name,
     segments,
-    direction: new THREE.Vector3(1, 0, 0),
+    direction: new THREE.Vector3(0, 0, 0),
     speed: 5,
     color: randomColor(),
     length: INITIAL_SNAKE_LENGTH,
@@ -97,7 +97,7 @@ export const useSnakeGame = create<SnakeGameState>()(
     aiSnakes: [],
     pellets: [],
     mapSize: MAP_SIZE,
-    mousePosition: new THREE.Vector2(0, 0),
+    mouseWorldPosition: { x: 0, z: 0 },
     cameraZoom: 30,
     
     startGame: () => {
@@ -152,8 +152,8 @@ export const useSnakeGame = create<SnakeGameState>()(
       setTimeout(() => startGame(), 100);
     },
     
-    updateMousePosition: (x: number, y: number) => {
-      set({ mousePosition: new THREE.Vector2(x, y) });
+    updateMousePosition: (x: number, z: number) => {
+      set({ mouseWorldPosition: { x, z } });
     },
     
     updatePlayerSnake: (snake: Snake) => {

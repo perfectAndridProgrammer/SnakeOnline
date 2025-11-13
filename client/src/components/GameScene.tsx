@@ -7,12 +7,11 @@ import Pellets from "./Pellets";
 import Ground from "./Ground";
 
 export default function GameScene() {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const playerSnake = useSnakeGame((state) => state.playerSnake);
   const aiSnakes = useSnakeGame((state) => state.aiSnakes);
   const pellets = useSnakeGame((state) => state.pellets);
-  const mousePosition = useSnakeGame((state) => state.mousePosition);
-  const cameraZoom = useSnakeGame((state) => state.cameraZoom);
+  const mouseWorldPosition = useSnakeGame((state) => state.mouseWorldPosition);
   const updatePlayerSnake = useSnakeGame((state) => state.updatePlayerSnake);
   const updateAISnakes = useSnakeGame((state) => state.updateAISnakes);
   const removePellet = useSnakeGame((state) => state.removePellet);
@@ -22,13 +21,24 @@ export default function GameScene() {
   const setPlayerBoosting = useSnakeGame((state) => state.setPlayerBoosting);
   
   const keysPressed = useRef<Set<string>>(new Set());
+  const raycaster = useRef(new THREE.Raycaster());
+  const plane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
   
   // Track mouse movement
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
+      // Convert screen coordinates to normalized device coordinates
       const x = (e.clientX / window.innerWidth) * 2 - 1;
       const y = -(e.clientY / window.innerHeight) * 2 + 1;
-      useSnakeGame.getState().updateMousePosition(x, y);
+      
+      // Use raycasting to get world position
+      raycaster.current.setFromCamera(new THREE.Vector2(x, y), camera);
+      const intersection = new THREE.Vector3();
+      raycaster.current.ray.intersectPlane(plane.current, intersection);
+      
+      if (intersection) {
+        useSnakeGame.getState().updateMousePosition(intersection.x, intersection.z);
+      }
     };
     
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -48,7 +58,7 @@ export default function GameScene() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [camera]);
   
   // Game loop
   useFrame((state, delta) => {
@@ -61,7 +71,7 @@ export default function GameScene() {
     }
     
     // Update player snake
-    const updatedPlayer = updateSnakeMovement(playerSnake, mousePosition, delta, isBoosting, pellets, mapSize);
+    const updatedPlayer = updateSnakeMovement(playerSnake, mouseWorldPosition, delta, isBoosting, pellets, mapSize);
     
     // Check pellet collisions for player
     const { snake: newPlayerSnake, collectedPellets } = checkPelletCollisions(updatedPlayer, pellets);
@@ -117,15 +127,27 @@ export default function GameScene() {
     
     updateAISnakes(updatedAI);
     
-    // Update camera to follow player
+    // Update camera to follow player (top-down view)
     if (newPlayerSnake.segments.length > 0) {
       const head = newPlayerSnake.segments[0].position;
-      const targetZoom = Math.max(25, Math.min(60, 25 + newPlayerSnake.length / 5));
+      const targetZoom = Math.max(6, Math.min(15, 6 + newPlayerSnake.length / 20));
       
+      // Keep camera directly above the player
       camera.position.x = THREE.MathUtils.lerp(camera.position.x, head.x, 0.1);
-      camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetZoom, 0.05);
-      camera.position.z = THREE.MathUtils.lerp(camera.position.z, head.z + targetZoom, 0.1);
+      camera.position.z = THREE.MathUtils.lerp(camera.position.z, head.z, 0.1);
+      
+      // Always look at the player's position
       camera.lookAt(head.x, 0, head.z);
+      
+      // Adjust zoom based on snake size
+      if ('zoom' in camera) {
+        (camera as THREE.OrthographicCamera).zoom = THREE.MathUtils.lerp(
+          (camera as THREE.OrthographicCamera).zoom,
+          targetZoom,
+          0.05
+        );
+        camera.updateProjectionMatrix();
+      }
     }
   });
   
@@ -155,7 +177,7 @@ function getRandomColor(): string {
 
 function updateSnakeMovement(
   snake: any,
-  mousePosition: THREE.Vector2,
+  mouseWorldPosition: { x: number; z: number },
   delta: number,
   isBoosting: boolean,
   pellets: any[],
@@ -165,12 +187,24 @@ function updateSnakeMovement(
   
   const head = snake.segments[0].position.clone();
   
-  // Calculate direction from mouse (only for player)
+  // Calculate direction from mouse world position (only for player)
   if (snake.id === "player") {
-    const targetX = head.x + mousePosition.x * 20;
-    const targetZ = head.z + mousePosition.y * 20;
-    const direction = new THREE.Vector3(targetX - head.x, 0, targetZ - head.z).normalize();
-    snake.direction = direction;
+    // mouseWorldPosition contains actual world coordinates (x, z)
+    const targetDir = new THREE.Vector3(
+      mouseWorldPosition.x - head.x,
+      0,
+      mouseWorldPosition.z - head.z
+    );
+    
+    const distanceToMouse = targetDir.length();
+    
+    // Only update direction if mouse is far enough from head (1 unit minimum)
+    if (distanceToMouse > 1.0) {
+      snake.direction = targetDir.normalize();
+    } else {
+      // If mouse is very close, stop moving
+      snake.direction = new THREE.Vector3(0, 0, 0);
+    }
   }
   
   // Apply speed boost
