@@ -1,6 +1,18 @@
 import { useEffect, useRef } from "react";
 import * as PIXI from "pixi.js";
-import { useSnakeGame, type Snake, type Pellet, distance2D, normalize2D, SEGMENT_RADIUS, SEGMENT_OVERLAP } from "@/lib/stores/useSnakeGame";
+import { 
+  useSnakeGame, 
+  type Snake, 
+  type Pellet, 
+  type SnakeSegment,
+  distance2D, 
+  normalize2D, 
+  SEGMENT_RADIUS, 
+  SEGMENT_OVERLAP,
+  COLLISION_COMPRESSION_SELF,
+  COLLISION_COMPRESSION_OTHER,
+  COLLISION_MIN_CENTER_RATIO
+} from "@/lib/stores/useSnakeGame";
 import GameUI from "./GameUI";
 
 /**
@@ -474,28 +486,39 @@ function updateSnakeMovement(
   let remainingLength = snake.length - 1;
   // Calculate spacing dynamically: diameter * (1 - overlap)
   const segmentSpacing = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP);
+  
   for (let i = 0; i < snake.segments.length && remainingLength > 0; i++) {
     const seg = snake.segments[i];
-    const dist = distance2D(newSegments[newSegments.length - 1].position, seg.position);
-
-    if (dist > segmentSpacing) {
-      // Move segment closer to maintain spacing
-      const dir = {
-        x: seg.position.x - newSegments[newSegments.length - 1].position.x,
-        y: seg.position.y - newSegments[newSegments.length - 1].position.y,
-      };
-      const normalized = normalize2D(dir);
-      const pos = {
-        x: newSegments[newSegments.length - 1].position.x + normalized.x * segmentSpacing,
-        y: newSegments[newSegments.length - 1].position.y + normalized.y * segmentSpacing,
-      };
-      newSegments.push({ position: pos, radius: seg.radius });
-      remainingLength--;
-    } else if (dist > 0.1) {
-      // Keep segment at current position if close enough
-      newSegments.push({ position: { ...seg.position }, radius: seg.radius });
-      remainingLength--;
+    const prevPos = newSegments[newSegments.length - 1].position;
+    
+    // Calculate direction from previous segment to current segment
+    let dir = {
+      x: seg.position.x - prevPos.x,
+      y: seg.position.y - prevPos.y,
+    };
+    
+    const dist = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+    
+    // Fallback for zero-length direction (segments on top of each other)
+    if (dist < 0.001) {
+      // Use snake's current direction as fallback
+      if (snake.direction.x !== 0 || snake.direction.y !== 0) {
+        dir = { x: snake.direction.x, y: snake.direction.y };
+      } else {
+        // Ultimate fallback: point right
+        dir = { x: 1, y: 0 };
+      }
     }
+    
+    // Always place segment at exactly segmentSpacing distance
+    const normalized = normalize2D(dir);
+    const pos = {
+      x: prevPos.x + normalized.x * segmentSpacing,
+      y: prevPos.y + normalized.y * segmentSpacing,
+    };
+    
+    newSegments.push({ position: pos, radius: seg.radius });
+    remainingLength--;
   }
 
   // Boosting consumes snake length (minimum length of 10)
@@ -565,26 +588,39 @@ function updateAISnake(
   let remainingLength = snake.length - 1;
   // Calculate spacing dynamically: diameter * (1 - overlap)
   const segmentSpacing = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP);
+  
   for (let i = 0; i < snake.segments.length && remainingLength > 0; i++) {
     const seg = snake.segments[i];
-    const dist = distance2D(newSegments[newSegments.length - 1].position, seg.position);
-
-    if (dist > segmentSpacing) {
-      const dir = {
-        x: seg.position.x - newSegments[newSegments.length - 1].position.x,
-        y: seg.position.y - newSegments[newSegments.length - 1].position.y,
-      };
-      const normalized = normalize2D(dir);
-      const pos = {
-        x: newSegments[newSegments.length - 1].position.x + normalized.x * segmentSpacing,
-        y: newSegments[newSegments.length - 1].position.y + normalized.y * segmentSpacing,
-      };
-      newSegments.push({ position: pos, radius: seg.radius });
-      remainingLength--;
-    } else if (dist > 0.1) {
-      newSegments.push({ position: { ...seg.position }, radius: seg.radius });
-      remainingLength--;
+    const prevPos = newSegments[newSegments.length - 1].position;
+    
+    // Calculate direction from previous segment to current segment
+    let dir = {
+      x: seg.position.x - prevPos.x,
+      y: seg.position.y - prevPos.y,
+    };
+    
+    const dist = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+    
+    // Fallback for zero-length direction (segments on top of each other)
+    if (dist < 0.001) {
+      // Use snake's current direction as fallback
+      if (snake.direction.x !== 0 || snake.direction.y !== 0) {
+        dir = { x: snake.direction.x, y: snake.direction.y };
+      } else {
+        // Ultimate fallback: point right
+        dir = { x: 1, y: 0 };
+      }
     }
+    
+    // Always place segment at exactly segmentSpacing distance
+    const normalized = normalize2D(dir);
+    const pos = {
+      x: prevPos.x + normalized.x * segmentSpacing,
+      y: prevPos.y + normalized.y * segmentSpacing,
+    };
+    
+    newSegments.push({ position: pos, radius: seg.radius });
+    remainingLength--;
   }
 
   return {
@@ -612,24 +648,54 @@ function checkPelletCollisions(snake: Snake, pellets: Pellet[]) {
   return { snake, collectedPellets };
 }
 
+/**
+ * Checks if two segments should be considered colliding based on compression ratio
+ * This approach scales properly with SEGMENT_RADIUS and SEGMENT_OVERLAP
+ */
+function shouldCollide(
+  headSeg: SnakeSegment, 
+  bodySeg: SnakeSegment, 
+  compressionLimit: number
+): { collides: boolean; compressionRatio: number; dist: number } {
+  const dist = distance2D(headSeg.position, bodySeg.position);
+  const sumRadius = headSeg.radius + bodySeg.radius;
+  
+  // Hard limit: centers are extremely close (nearly on top of each other)
+  const minCenterDistance = sumRadius * COLLISION_MIN_CENTER_RATIO;
+  if (dist <= minCenterDistance) {
+    return { collides: true, compressionRatio: 1.0, dist };
+  }
+  
+  // Calculate expected spacing with normal overlap
+  const nominalSpacing = sumRadius * (1 - SEGMENT_OVERLAP);
+  
+  // Calculate how much extra compression beyond normal overlap
+  const compression = Math.max(0, nominalSpacing - dist);
+  const compressionRatio = nominalSpacing > 0 ? compression / nominalSpacing : 0;
+  
+  // Collision if compression exceeds the limit
+  const collides = compressionRatio > compressionLimit;
+  
+  return { collides, compressionRatio, dist };
+}
+
 // Checks if player snake collides with AI snakes or itself
 function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
-  const head = playerSnake.segments[0].position;
-  const headRadius = playerSnake.segments[0].radius;
-  
-  // Collision threshold: circles overlap more than the allowed segment overlap
-  // We allow 20% overlap normally, so collision happens at ~60% overlap (more aggressive)
-  const collisionThreshold = headRadius * 0.8;
+  const headSeg = playerSnake.segments[0];
 
   // Check collision with AI snake bodies
   for (const aiSnake of aiSnakes) {
     // Start checking from segment 3 to avoid head-to-head collisions
     for (let i = 3; i < aiSnake.segments.length; i++) {
-      const segment = aiSnake.segments[i];
-      const dist = distance2D(head, segment.position);
-      // Collision when head center is very close to segment center
-      if (dist < collisionThreshold) {
-        console.log(`Collision with AI snake ${aiSnake.name} segment ${i}, dist: ${dist.toFixed(2)}`);
+      const bodySeg = aiSnake.segments[i];
+      const result = shouldCollide(headSeg, bodySeg, COLLISION_COMPRESSION_OTHER);
+      
+      if (result.collides) {
+        console.log(
+          `Collision with AI snake ${aiSnake.name} segment ${i}:`,
+          `dist=${result.dist.toFixed(2)}`,
+          `compression=${(result.compressionRatio * 100).toFixed(1)}%`
+        );
         return true; // Game over
       }
     }
@@ -637,11 +703,15 @@ function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
 
   // Check self-collision (hitting own tail)
   for (let i = 5; i < playerSnake.segments.length; i++) {
-    const segment = playerSnake.segments[i];
-    const dist = distance2D(head, segment.position);
-    // Collision when head center is very close to tail segment center
-    if (dist < collisionThreshold) {
-      console.log(`Self-collision with segment ${i}, dist: ${dist.toFixed(2)}`);
+    const bodySeg = playerSnake.segments[i];
+    const result = shouldCollide(headSeg, bodySeg, COLLISION_COMPRESSION_SELF);
+    
+    if (result.collides) {
+      console.log(
+        `Self-collision with segment ${i}:`,
+        `dist=${result.dist.toFixed(2)}`,
+        `compression=${(result.compressionRatio * 100).toFixed(1)}%`
+      );
       return true; // Game over
     }
   }
