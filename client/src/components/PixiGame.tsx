@@ -57,12 +57,19 @@ export default function PixiGame() {
       gameContainer.addChild(pelletGraphics);
       gameContainer.addChild(snakeGraphics);
 
-      // Track keyboard state
+      // Track keyboard state and debug mode
       const keysPressed = new Set<string>();
+      let debugMode = false;
       
       // ===== INPUT HANDLERS =====
       const handleKeyDown = (e: KeyboardEvent) => {
         keysPressed.add(e.code);
+        
+        // Toggle debug mode with 'D' key
+        if (e.code === "KeyD") {
+          debugMode = !debugMode;
+          console.log(`🔍 Debug mode: ${debugMode ? "ON" : "OFF"}`);
+        }
       };
       
       const handleKeyUp = (e: KeyboardEvent) => {
@@ -92,6 +99,59 @@ export default function PixiGame() {
       window.addEventListener("keydown", handleKeyDown);
       window.addEventListener("keyup", handleKeyUp);
       window.addEventListener("mousemove", handleMouseMove);
+
+      // Debug logging helper (only logs when debug mode is on)
+      let frameCounter = 0;
+      const logDebugInfo = (state: any, newPlayerSnake: Snake) => {
+        frameCounter++;
+        // Log every 60 frames (once per second at 60 FPS)
+        if (frameCounter % 60 === 0 && debugMode) {
+          console.group("🎮 Game Debug Info");
+          
+          console.log("📱 Screen:", {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            ratio: (window.innerWidth / window.innerHeight).toFixed(2)
+          });
+          
+          console.log("🗺️ Map:", {
+            size: state.mapSize,
+            bounds: `${-state.mapSize/2} to ${state.mapSize/2}`
+          });
+          
+          console.log("🐍 Player Snake:", {
+            position: newPlayerSnake.segments[0].position,
+            length: newPlayerSnake.length,
+            score: newPlayerSnake.score,
+            segments: newPlayerSnake.segments.length,
+            speed: newPlayerSnake.speed,
+            isBoosting: newPlayerSnake.isBoosting
+          });
+          
+          console.log("🖱️ Mouse:", {
+            worldPosition: state.mouseWorldPosition,
+            distance: distance2D(
+              newPlayerSnake.segments[0].position,
+              state.mouseWorldPosition
+            ).toFixed(2)
+          });
+          
+          console.log("📷 Camera:", {
+            pivot: gameContainer.pivot,
+            scale: gameContainer.scale.x.toFixed(3),
+            position: gameContainer.position
+          });
+          
+          console.log("🎯 Game State:", {
+            pellets: state.pellets.length,
+            aiSnakes: state.aiSnakes.length,
+            fps: app.ticker.FPS.toFixed(1),
+            deltaTime: ticker.deltaTime.toFixed(3)
+          });
+          
+          console.groupEnd();
+        }
+      };
 
       // ===== GAME LOOP =====
       // Pixi.Ticker runs at ~60 FPS and drives the game logic
@@ -178,6 +238,9 @@ export default function PixiGame() {
         });
 
         state.updateAISnakes(updatedAI);
+
+        // ===== DEBUG LOGGING =====
+        logDebugInfo(state, newPlayerSnake);
 
         // ===== CAMERA SYSTEM: Follow player with dynamic zoom =====
         // In Pixi.js, camera is simulated by transforming the game container:
