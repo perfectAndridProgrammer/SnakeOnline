@@ -70,16 +70,13 @@ export default function PixiGame() {
       };
       
       const handleMouseMove = (e: MouseEvent) => {
-        // Safety check: ensure app is fully initialized
-        if (!app.screen) return;
-        
         // ===== SCREEN TO WORLD COORDINATE CONVERSION =====
         // Screen coords: Mouse position in browser window (pixels)
         // World coords: Position in the game world (units)
         
         // Step 1: Center screen coords (0,0 = center of screen)
-        const screenX = e.clientX - app.screen.width / 2;
-        const screenY = e.clientY - app.screen.height / 2;
+        const screenX = e.clientX - window.innerWidth / 2;
+        const screenY = e.clientY - window.innerHeight / 2;
         
         // Step 2: Reverse the camera zoom
         const zoomedX = screenX / gameContainer.scale.x;
@@ -191,10 +188,11 @@ export default function PixiGame() {
           const head = newPlayerSnake.segments[0].position;
           
           // Calculate zoom based on snake length
-          // Lower values = more zoomed out = see more of the map
-          const baseZoom = 0.35;   // Initial zoom (starts more zoomed out for full screen view)
-          const minZoom = 0.2;     // Maximum zoom out
-          const zoomScale = 0.003; // How quickly zoom changes with length
+          // Higher values = more zoomed in = objects appear larger
+          // Scale of 3-4 gives a good balance between seeing the map and detail
+          const baseZoom = 4.0;    // Initial zoom (nice close-up view)
+          const minZoom = 2.5;     // Maximum zoom out (still keep things visible)
+          const zoomScale = 0.015; // How quickly zoom changes with length
           const targetZoom = Math.max(
             minZoom,
             baseZoom - (newPlayerSnake.length - 10) * zoomScale
