@@ -3,7 +3,16 @@ import { subscribeWithSelector } from "zustand/middleware";
 
 export type GamePhase = "menu" | "playing" | "gameover";
 
-// Simple 2D point for positions in the game world
+/**
+ * Simple 2D point for positions in the game world
+ * 
+ * Now using native 2D coordinates instead of THREE.Vector3:
+ * - x: horizontal position (left/right)
+ * - y: vertical position (up/down)
+ * 
+ * This is simpler and more efficient than 3D coordinates where
+ * we were using (x, 0, z) with y always at 0.
+ */
 export interface Point2D {
   x: number;
   y: number;
@@ -77,14 +86,23 @@ const randomColor = () => {
   return colors[Math.floor(Math.random() * colors.length)];
 };
 
-// Helper to calculate distance between two 2D points
+/**
+ * Calculate distance between two 2D points using Pythagorean theorem
+ * distance = √((x2-x1)² + (y2-y1)²)
+ */
 const distance2D = (p1: Point2D, p2: Point2D): number => {
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
   return Math.sqrt(dx * dx + dy * dy);
 };
 
-// Helper to normalize a 2D vector (make it length 1)
+/**
+ * Normalize a 2D vector (make it length 1 while keeping direction)
+ * Used for movement directions: ensures constant speed regardless of direction
+ * 
+ * Formula: normalized = vector / length
+ * Example: {x: 3, y: 4} → length = 5 → normalized = {x: 0.6, y: 0.8}
+ */
 const normalize2D = (point: Point2D): Point2D => {
   const len = Math.sqrt(point.x * point.x + point.y * point.y);
   if (len === 0) return { x: 0, y: 0 };

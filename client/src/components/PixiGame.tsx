@@ -3,25 +3,36 @@ import * as PIXI from "pixi.js";
 import { useSnakeGame, type Snake, type Pellet, distance2D, normalize2D } from "@/lib/stores/useSnakeGame";
 import GameUI from "./GameUI";
 
+/**
+ * PixiGame - Main game component using Pixi.js for 2D rendering
+ * 
+ * This replaces the Three.js implementation with a pure 2D rendering solution:
+ * - Uses Pixi.js WebGL renderer (optimized for 2D graphics)
+ * - Smaller bundle size (~500KB vs 1MB+ for Three.js)
+ * - Better performance for 2D games
+ * - Native 2D coordinates (x, y) instead of 3D (x, y, z)
+ */
 export default function PixiGame() {
+  // References to DOM element and Pixi application
   const canvasRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const phase = useSnakeGame((state) => state.phase);
 
   useEffect(() => {
+    // Only initialize when playing and DOM is ready
     if (!canvasRef.current || phase !== "playing") return;
 
     // ===== PIXI.JS APPLICATION SETUP =====
-    // Create Pixi application with 2D canvas renderer
+    // Pixi.Application manages the renderer, ticker, and stage
     const app = new PIXI.Application();
     
     app.init({
       width: window.innerWidth,
       height: window.innerHeight,
-      backgroundColor: 0x1a1a2e,  // Dark blue background
-      antialias: true,
-      resolution: window.devicePixelRatio || 1,
-      autoDensity: true,
+      backgroundColor: 0x1a1a2e,  // Dark blue background (hex color)
+      antialias: true,             // Smooth edges
+      resolution: window.devicePixelRatio || 1,  // High DPI support
+      autoDensity: true,           // Scale canvas for retina displays
     }).then(() => {
       if (!canvasRef.current) return;
       
@@ -29,15 +40,19 @@ export default function PixiGame() {
       canvasRef.current.appendChild(app.canvas);
       appRef.current = app;
 
-      // Create container for all game objects (allows camera transform)
+      // ===== SCENE GRAPH SETUP =====
+      // gameContainer holds all game objects and can be transformed (camera)
+      // This allows us to pan and zoom the entire game world
       const gameContainer = new PIXI.Container();
       app.stage.addChild(gameContainer);
 
-      // ===== GAME OBJECTS =====
-      const groundGraphics = new PIXI.Graphics();
-      const snakeGraphics = new PIXI.Graphics();
-      const pelletGraphics = new PIXI.Graphics();
+      // ===== GRAPHICS OBJECTS =====
+      // Using PIXI.Graphics for efficient vector drawing (redrawn each frame)
+      const groundGraphics = new PIXI.Graphics();  // Grid and background
+      const snakeGraphics = new PIXI.Graphics();   // All snakes
+      const pelletGraphics = new PIXI.Graphics();  // All pellets
       
+      // Add to container in render order (back to front)
       gameContainer.addChild(groundGraphics);
       gameContainer.addChild(pelletGraphics);
       gameContainer.addChild(snakeGraphics);
@@ -55,10 +70,21 @@ export default function PixiGame() {
       };
       
       const handleMouseMove = (e: MouseEvent) => {
-        // Convert screen coordinates to world coordinates
-        // Account for camera position (viewport offset)
-        const worldX = (e.clientX - app.screen.width / 2) / gameContainer.scale.x + gameContainer.pivot.x;
-        const worldY = (e.clientY - app.screen.height / 2) / gameContainer.scale.y + gameContainer.pivot.y;
+        // ===== SCREEN TO WORLD COORDINATE CONVERSION =====
+        // Screen coords: Mouse position in browser window (pixels)
+        // World coords: Position in the game world (units)
+        
+        // Step 1: Center screen coords (0,0 = center of screen)
+        const screenX = e.clientX - app.screen.width / 2;
+        const screenY = e.clientY - app.screen.height / 2;
+        
+        // Step 2: Reverse the camera zoom
+        const zoomedX = screenX / gameContainer.scale.x;
+        const zoomedY = screenY / gameContainer.scale.y;
+        
+        // Step 3: Add camera position (pivot = what the camera is looking at)
+        const worldX = zoomedX + gameContainer.pivot.x;
+        const worldY = zoomedY + gameContainer.pivot.y;
         
         useSnakeGame.getState().updateMousePosition(worldX, worldY);
       };
@@ -68,8 +94,10 @@ export default function PixiGame() {
       window.addEventListener("mousemove", handleMouseMove);
 
       // ===== GAME LOOP =====
+      // Pixi.Ticker runs at ~60 FPS and drives the game logic
       app.ticker.add((ticker) => {
-        const delta = ticker.deltaTime / 60; // Convert to seconds
+        // ticker.deltaTime is in frames (60 FPS = 1), convert to seconds
+        const delta = ticker.deltaTime / 60;
         const state = useSnakeGame.getState();
         
         if (!state.playerSnake) return;
@@ -152,27 +180,33 @@ export default function PixiGame() {
         state.updateAISnakes(updatedAI);
 
         // ===== CAMERA SYSTEM: Follow player with dynamic zoom =====
+        // In Pixi.js, camera is simulated by transforming the game container:
+        // - pivot: what point in world space the camera looks at
+        // - position: where to draw that pivot point on screen (center)
+        // - scale: zoom level (higher = zoomed in)
         if (newPlayerSnake.segments.length > 0) {
           const head = newPlayerSnake.segments[0].position;
           
-          // Calculate zoom based on snake length (starts at 1.2, zooms out to 0.6)
-          const baseZoom = 1.2;
-          const minZoom = 0.6;
-          const zoomScale = 0.01;
+          // Calculate zoom based on snake length
+          // Starts zoomed in (1.2) when small, zooms out to (0.6) when very long
+          const baseZoom = 1.2;   // Initial zoom (higher = more zoomed in)
+          const minZoom = 0.6;    // Maximum zoom out
+          const zoomScale = 0.01; // How quickly zoom changes with length
           const targetZoom = Math.max(
             minZoom,
             baseZoom - (newPlayerSnake.length - 10) * zoomScale
           );
           
-          // Smoothly follow player position (camera pivot)
+          // Smoothly follow player position (lerp = linear interpolation)
+          // pivot.x/y determines what world coordinates are at screen center
           const lerpFactor = 0.1;
           gameContainer.pivot.x += (head.x - gameContainer.pivot.x) * lerpFactor;
           gameContainer.pivot.y += (head.y - gameContainer.pivot.y) * lerpFactor;
           
-          // Center the view
+          // Position container so pivot point appears at screen center
           gameContainer.position.set(app.screen.width / 2, app.screen.height / 2);
           
-          // Smoothly adjust zoom
+          // Smoothly adjust zoom level
           gameContainer.scale.x += (targetZoom - gameContainer.scale.x) * 0.05;
           gameContainer.scale.y += (targetZoom - gameContainer.scale.y) * 0.05;
         }
@@ -208,24 +242,33 @@ export default function PixiGame() {
 }
 
 // ===== RENDERING FUNCTIONS =====
+// These use Pixi.Graphics API to draw shapes directly to the canvas
+// Graphics are cleared and redrawn each frame (immediate mode rendering)
 
-// Draws the ground/background grid
+/**
+ * Draws the ground/background grid
+ * 
+ * Pixi.js uses immediate mode rendering: clear() → draw shapes → display
+ * This is more efficient than creating thousands of sprite objects
+ */
 function drawGround(graphics: PIXI.Graphics, mapSize: number) {
-  graphics.clear();
+  graphics.clear();  // Clear previous frame
   
-  // Draw grid background
+  // Draw background rectangle
   graphics.rect(-mapSize / 2, -mapSize / 2, mapSize, mapSize);
-  graphics.fill(0x0f0f1e);  // Slightly lighter than background
+  graphics.fill(0x0f0f1e);  // Slightly lighter than background (hex color)
   
-  // Draw grid lines
+  // Draw grid lines for visual reference
   graphics.setStrokeStyle({ width: 1, color: 0x2a2a3e, alpha: 0.3 });
-  const gridSize = 20;
+  const gridSize = 20;  // Grid spacing in world units
   
+  // Vertical lines
   for (let x = -mapSize / 2; x <= mapSize / 2; x += gridSize) {
     graphics.moveTo(x, -mapSize / 2);
     graphics.lineTo(x, mapSize / 2);
   }
   
+  // Horizontal lines
   for (let y = -mapSize / 2; y <= mapSize / 2; y += gridSize) {
     graphics.moveTo(-mapSize / 2, y);
     graphics.lineTo(mapSize / 2, y);
@@ -234,17 +277,23 @@ function drawGround(graphics: PIXI.Graphics, mapSize: number) {
   graphics.stroke();
 }
 
-// Draws all pellets
+/**
+ * Draws all pellets (food items) as colored circles
+ * Batched into a single graphics object for efficiency
+ */
 function drawPellets(graphics: PIXI.Graphics, pellets: Pellet[]) {
   graphics.clear();
   
   for (const pellet of pellets) {
     graphics.circle(pellet.position.x, pellet.position.y, pellet.size * 2);
-    graphics.fill(pellet.color);
+    graphics.fill(pellet.color);  // Color from pellet (CSS color string or hex)
   }
 }
 
-// Draws all snakes (player and AI)
+/**
+ * Draws all snakes (player and AI)
+ * Each snake is drawn as a series of circles forming a smooth body
+ */
 function drawSnakes(graphics: PIXI.Graphics, playerSnake: Snake, aiSnakes: Snake[]) {
   graphics.clear();
   
@@ -257,28 +306,46 @@ function drawSnakes(graphics: PIXI.Graphics, playerSnake: Snake, aiSnakes: Snake
   }
 }
 
-// Draws a single snake with all its segments
+/**
+ * Draws a single snake with all its segments
+ * 
+ * Visual design:
+ * - Each segment is a circle
+ * - Tail fades slightly for depth effect
+ * - Head has white highlight for visibility
+ */
 function drawSingleSnake(graphics: PIXI.Graphics, snake: Snake) {
   if (snake.segments.length === 0) return;
   
-  // Draw body segments
+  // Draw body segments (circles that follow each other)
   for (let i = 0; i < snake.segments.length; i++) {
     const segment = snake.segments[i];
-    const alpha = 1 - (i / snake.segments.length) * 0.3; // Fade tail slightly
+    // Fade tail slightly (alpha: 1.0 at head → 0.7 at tail)
+    const alpha = 1 - (i / snake.segments.length) * 0.3;
     
     graphics.circle(segment.position.x, segment.position.y, segment.radius);
     graphics.fill({ color: snake.color, alpha });
   }
   
-  // Draw head highlight (white circle)
+  // Draw head highlight (white dot to indicate direction)
   const head = snake.segments[0];
   graphics.circle(head.position.x, head.position.y, head.radius * 0.5);
-  graphics.fill(0xffffff);
+  graphics.fill(0xffffff);  // White color
 }
 
 // ===== GAME LOGIC FUNCTIONS =====
+// These functions handle game mechanics (movement, collisions, AI)
+// They work with pure data (no rendering) and update the game state
 
-// Updates snake position and direction based on target or AI logic
+/**
+ * Updates snake position and direction based on mouse or AI logic
+ * 
+ * Movement system:
+ * 1. Calculate direction (player: toward mouse, AI: toward pellet)
+ * 2. Move head by speed * delta (physics)
+ * 3. Each segment follows the one in front at fixed distance
+ * 4. This creates smooth snake-like motion
+ */
 function updateSnakeMovement(
   snake: Snake,
   mouseWorldPosition: { x: number; y: number },
