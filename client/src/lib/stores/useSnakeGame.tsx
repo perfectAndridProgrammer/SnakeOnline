@@ -75,12 +75,6 @@ interface SnakeGameState {
 const MAP_SIZE = 500;           // World is 500x500 units
 const INITIAL_SNAKE_LENGTH = 10;
 const SEGMENT_RADIUS = 1.5;
-const SEGMENT_OVERLAP = 0.2;    // 20% overlap between segments
-
-// Collision detection constants (work with any SEGMENT_RADIUS)
-const COLLISION_COMPRESSION_SELF = 0.6;   // Allow 60% extra compression for self-collision (80% total overlap)
-const COLLISION_COMPRESSION_OTHER = 0.2;  // Only 20% extra compression for other snakes (40% total overlap)
-const COLLISION_MIN_CENTER_RATIO = 0.25;  // Hard limit: centers can't be closer than 25% of sum of radii
 
 // Helper to generate random color from predefined palette
 const randomColor = () => {
@@ -131,12 +125,10 @@ const normalize2D = (point: Point2D): Point2D => {
 // Creates a new snake with initial segments positioned in a line
 const createSnake = (id: string, name: string, startX: number, startY: number): Snake => {
   const segments: SnakeSegment[] = [];
-  // Calculate spacing: diameter * (1 - overlap) = radius * 2 * (1 - overlap)
-  const segmentSpacing = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP);
-  // Create segments from head to tail, spaced to maintain consistent overlap
+  // Create segments from head to tail, each 1 unit apart (moving left along X axis)
   for (let i = 0; i < INITIAL_SNAKE_LENGTH; i++) {
     segments.push({
-      position: { x: startX - i * segmentSpacing, y: startY },
+      position: { x: startX - i * 1, y: startY },
       radius: SEGMENT_RADIUS,
     });
   }
@@ -264,13 +256,5 @@ export const useSnakeGame = create<SnakeGameState>()(
   }))
 );
 
-// Export helper functions and constants for use in game logic
-export { 
-  distance2D, 
-  normalize2D, 
-  SEGMENT_RADIUS, 
-  SEGMENT_OVERLAP,
-  COLLISION_COMPRESSION_SELF,
-  COLLISION_COMPRESSION_OTHER,
-  COLLISION_MIN_CENTER_RATIO
-};
+// Export helper functions for use in game logic
+export { distance2D, normalize2D };

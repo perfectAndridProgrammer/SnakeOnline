@@ -1,18 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as PIXI from "pixi.js";
-import { 
-  useSnakeGame, 
-  type Snake, 
-  type Pellet, 
-  type SnakeSegment,
-  distance2D, 
-  normalize2D, 
-  SEGMENT_RADIUS, 
-  SEGMENT_OVERLAP,
-  COLLISION_COMPRESSION_SELF,
-  COLLISION_COMPRESSION_OTHER,
-  COLLISION_MIN_CENTER_RATIO
-} from "@/lib/stores/useSnakeGame";
+import { useSnakeGame, type Snake, type Pellet, distance2D, normalize2D } from "@/lib/stores/useSnakeGame";
 import GameUI from "./GameUI";
 
 /**
@@ -484,36 +472,29 @@ function updateSnakeMovement(
   const newSegments = [{ position: newHead, radius: snake.segments[0].radius }];
 
   let remainingLength = snake.length - 1;
-  // Calculate spacing dynamically: diameter * (1 - overlap)
-  const segmentSpacing = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP);
-  
+  // Each segment follows the previous one at a fixed distance (1 unit)
   for (let i = 0; i < snake.segments.length && remainingLength > 0; i++) {
     const seg = snake.segments[i];
-    const prevPos = newSegments[newSegments.length - 1].position;
-    
-    // Calculate direction from previous segment to current segment
-    const dir = {
-      x: seg.position.x - prevPos.x,
-      y: seg.position.y - prevPos.y,
-    };
-    
-    const dist = distance2D(prevPos, seg.position);
-    
-    // Only move segment if it's too far from the previous one
-    if (dist > segmentSpacing) {
-      // Pull segment to maintain spacing
+    const dist = distance2D(newSegments[newSegments.length - 1].position, seg.position);
+
+    if (dist > 1) {
+      // Move segment closer to maintain 1 unit spacing
+      const dir = {
+        x: seg.position.x - newSegments[newSegments.length - 1].position.x,
+        y: seg.position.y - newSegments[newSegments.length - 1].position.y,
+      };
       const normalized = normalize2D(dir);
       const pos = {
-        x: prevPos.x + normalized.x * segmentSpacing,
-        y: prevPos.y + normalized.y * segmentSpacing,
+        x: newSegments[newSegments.length - 1].position.x + normalized.x * 1,
+        y: newSegments[newSegments.length - 1].position.y + normalized.y * 1,
       };
       newSegments.push({ position: pos, radius: seg.radius });
-    } else {
-      // Segment is already close enough, keep it where it is
+      remainingLength--;
+    } else if (dist > 0.1) {
+      // Keep segment at current position if close enough
       newSegments.push({ position: { ...seg.position }, radius: seg.radius });
+      remainingLength--;
     }
-    
-    remainingLength--;
   }
 
   // Boosting consumes snake length (minimum length of 10)
@@ -581,36 +562,26 @@ function updateAISnake(
   const newSegments = [{ position: newHead, radius: snake.segments[0].radius }];
 
   let remainingLength = snake.length - 1;
-  // Calculate spacing dynamically: diameter * (1 - overlap)
-  const segmentSpacing = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP);
-  
   for (let i = 0; i < snake.segments.length && remainingLength > 0; i++) {
     const seg = snake.segments[i];
-    const prevPos = newSegments[newSegments.length - 1].position;
-    
-    // Calculate direction from previous segment to current segment
-    const dir = {
-      x: seg.position.x - prevPos.x,
-      y: seg.position.y - prevPos.y,
-    };
-    
-    const dist = distance2D(prevPos, seg.position);
-    
-    // Only move segment if it's too far from the previous one
-    if (dist > segmentSpacing) {
-      // Pull segment to maintain spacing
+    const dist = distance2D(newSegments[newSegments.length - 1].position, seg.position);
+
+    if (dist > 1) {
+      const dir = {
+        x: seg.position.x - newSegments[newSegments.length - 1].position.x,
+        y: seg.position.y - newSegments[newSegments.length - 1].position.y,
+      };
       const normalized = normalize2D(dir);
       const pos = {
-        x: prevPos.x + normalized.x * segmentSpacing,
-        y: prevPos.y + normalized.y * segmentSpacing,
+        x: newSegments[newSegments.length - 1].position.x + normalized.x * 1,
+        y: newSegments[newSegments.length - 1].position.y + normalized.y * 1,
       };
       newSegments.push({ position: pos, radius: seg.radius });
-    } else {
-      // Segment is already close enough, keep it where it is
+      remainingLength--;
+    } else if (dist > 0.1) {
       newSegments.push({ position: { ...seg.position }, radius: seg.radius });
+      remainingLength--;
     }
-    
-    remainingLength--;
   }
 
   return {
@@ -623,12 +594,11 @@ function updateAISnake(
 function checkPelletCollisions(snake: Snake, pellets: Pellet[]) {
   const collectedPellets: string[] = [];
   const head = snake.segments[0].position;
-  const headRadius = snake.segments[0].radius;
 
   for (const pellet of pellets) {
     const dist = distance2D(head, pellet.position);
-    // Collision when pellet is within head radius
-    if (dist < headRadius) {
+    // Collision radius: 1.5 units
+    if (dist < 1.5) {
       collectedPellets.push(pellet.id);
       snake.length += 1; // Grow snake by 1 segment
       snake.score += 1; // Increase score
@@ -638,54 +608,17 @@ function checkPelletCollisions(snake: Snake, pellets: Pellet[]) {
   return { snake, collectedPellets };
 }
 
-/**
- * Checks if two segments should be considered colliding based on compression ratio
- * This approach scales properly with SEGMENT_RADIUS and SEGMENT_OVERLAP
- */
-function shouldCollide(
-  headSeg: SnakeSegment, 
-  bodySeg: SnakeSegment, 
-  compressionLimit: number
-): { collides: boolean; compressionRatio: number; dist: number } {
-  const dist = distance2D(headSeg.position, bodySeg.position);
-  const sumRadius = headSeg.radius + bodySeg.radius;
-  
-  // Hard limit: centers are extremely close (nearly on top of each other)
-  const minCenterDistance = sumRadius * COLLISION_MIN_CENTER_RATIO;
-  if (dist <= minCenterDistance) {
-    return { collides: true, compressionRatio: 1.0, dist };
-  }
-  
-  // Calculate expected spacing with normal overlap
-  const nominalSpacing = sumRadius * (1 - SEGMENT_OVERLAP);
-  
-  // Calculate how much extra compression beyond normal overlap
-  const compression = Math.max(0, nominalSpacing - dist);
-  const compressionRatio = nominalSpacing > 0 ? compression / nominalSpacing : 0;
-  
-  // Collision if compression exceeds the limit
-  const collides = compressionRatio > compressionLimit;
-  
-  return { collides, compressionRatio, dist };
-}
-
 // Checks if player snake collides with AI snakes or itself
 function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
-  const headSeg = playerSnake.segments[0];
+  const head = playerSnake.segments[0].position;
 
   // Check collision with AI snake bodies
   for (const aiSnake of aiSnakes) {
     // Start checking from segment 3 to avoid head-to-head collisions
     for (let i = 3; i < aiSnake.segments.length; i++) {
-      const bodySeg = aiSnake.segments[i];
-      const result = shouldCollide(headSeg, bodySeg, COLLISION_COMPRESSION_OTHER);
-      
-      if (result.collides) {
-        console.log(
-          `Collision with AI snake ${aiSnake.name} segment ${i}:`,
-          `dist=${result.dist.toFixed(2)}`,
-          `compression=${(result.compressionRatio * 100).toFixed(1)}%`
-        );
+      const segment = aiSnake.segments[i];
+      const dist = distance2D(head, segment.position);
+      if (dist < 1) {
         return true; // Game over
       }
     }
@@ -693,15 +626,9 @@ function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
 
   // Check self-collision (hitting own tail)
   for (let i = 5; i < playerSnake.segments.length; i++) {
-    const bodySeg = playerSnake.segments[i];
-    const result = shouldCollide(headSeg, bodySeg, COLLISION_COMPRESSION_SELF);
-    
-    if (result.collides) {
-      console.log(
-        `Self-collision with segment ${i}:`,
-        `dist=${result.dist.toFixed(2)}`,
-        `compression=${(result.compressionRatio * 100).toFixed(1)}%`
-      );
+    const segment = playerSnake.segments[i];
+    const dist = distance2D(head, segment.position);
+    if (dist < 0.8) {
       return true; // Game over
     }
   }
