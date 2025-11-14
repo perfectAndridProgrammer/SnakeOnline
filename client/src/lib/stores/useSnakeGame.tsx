@@ -102,6 +102,19 @@ const distance2D = (p1: Point2D, p2: Point2D): number => {
  * 
  * Formula: normalized = vector / length
  * Example: {x: 3, y: 4} → length = 5 → normalized = {x: 0.6, y: 0.8}
+ * 
+ * 
+ * Why normalize in a snake game?
+ * If the snake moves freely (not grid-based), it might move in ANY direction—diagonal, sideways, up, down.
+ * Diagonal movement is naturally faster:
+ * Moving (1, 1) means speed = √(1² + 1²) = 1.41
+ * Moving (1, 0) means speed = 1
+ * This makes diagonal movement unfairly faster.
+ * 🙅 Without normalization:
+ * Diagonal movement = faster snake
+ * 
+ * 👍 With normalization:
+ * Every direction has speed = 1, so the snake moves smoothly and fairly.
  */
 const normalize2D = (point: Point2D): Point2D => {
   const len = Math.sqrt(point.x * point.x + point.y * point.y);
