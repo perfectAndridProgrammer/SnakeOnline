@@ -492,44 +492,27 @@ function updateSnakeMovement(
     const prevPos = newSegments[newSegments.length - 1].position;
     
     // Calculate direction from previous segment to current segment
-    let dir = {
+    const dir = {
       x: seg.position.x - prevPos.x,
       y: seg.position.y - prevPos.y,
     };
     
-    const dist = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+    const dist = distance2D(prevPos, seg.position);
     
-    // Calculate the ideal target position (segmentSpacing away from previous)
-    let targetPos;
-    
-    if (dist < 0.001) {
-      // Segments on top of each other - use fallback direction
-      const fallbackDir = (snake.direction.x !== 0 || snake.direction.y !== 0) 
-        ? snake.direction 
-        : { x: 1, y: 0 };
-      const normalized = normalize2D(fallbackDir);
-      targetPos = {
-        x: prevPos.x + normalized.x * segmentSpacing,
-        y: prevPos.y + normalized.y * segmentSpacing,
-      };
-    } else {
-      // Normal case: place at segmentSpacing distance in current direction
+    // Only move segment if it's too far from the previous one
+    if (dist > segmentSpacing) {
+      // Pull segment to maintain spacing
       const normalized = normalize2D(dir);
-      targetPos = {
+      const pos = {
         x: prevPos.x + normalized.x * segmentSpacing,
         y: prevPos.y + normalized.y * segmentSpacing,
       };
+      newSegments.push({ position: pos, radius: seg.radius });
+    } else {
+      // Segment is already close enough, keep it where it is
+      newSegments.push({ position: { ...seg.position }, radius: seg.radius });
     }
     
-    // Smoothly interpolate towards target position for natural movement
-    // Use stronger interpolation when far from target, weaker when close
-    const lerpFactor = Math.min(0.5, dist / segmentSpacing);
-    const pos = {
-      x: seg.position.x + (targetPos.x - seg.position.x) * lerpFactor,
-      y: seg.position.y + (targetPos.y - seg.position.y) * lerpFactor,
-    };
-    
-    newSegments.push({ position: pos, radius: seg.radius });
     remainingLength--;
   }
 
@@ -606,44 +589,27 @@ function updateAISnake(
     const prevPos = newSegments[newSegments.length - 1].position;
     
     // Calculate direction from previous segment to current segment
-    let dir = {
+    const dir = {
       x: seg.position.x - prevPos.x,
       y: seg.position.y - prevPos.y,
     };
     
-    const dist = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+    const dist = distance2D(prevPos, seg.position);
     
-    // Calculate the ideal target position (segmentSpacing away from previous)
-    let targetPos;
-    
-    if (dist < 0.001) {
-      // Segments on top of each other - use fallback direction
-      const fallbackDir = (snake.direction.x !== 0 || snake.direction.y !== 0) 
-        ? snake.direction 
-        : { x: 1, y: 0 };
-      const normalized = normalize2D(fallbackDir);
-      targetPos = {
-        x: prevPos.x + normalized.x * segmentSpacing,
-        y: prevPos.y + normalized.y * segmentSpacing,
-      };
-    } else {
-      // Normal case: place at segmentSpacing distance in current direction
+    // Only move segment if it's too far from the previous one
+    if (dist > segmentSpacing) {
+      // Pull segment to maintain spacing
       const normalized = normalize2D(dir);
-      targetPos = {
+      const pos = {
         x: prevPos.x + normalized.x * segmentSpacing,
         y: prevPos.y + normalized.y * segmentSpacing,
       };
+      newSegments.push({ position: pos, radius: seg.radius });
+    } else {
+      // Segment is already close enough, keep it where it is
+      newSegments.push({ position: { ...seg.position }, radius: seg.radius });
     }
     
-    // Smoothly interpolate towards target position for natural movement
-    // Use stronger interpolation when far from target, weaker when close
-    const lerpFactor = Math.min(0.5, dist / segmentSpacing);
-    const pos = {
-      x: seg.position.x + (targetPos.x - seg.position.x) * lerpFactor,
-      y: seg.position.y + (targetPos.y - seg.position.y) * lerpFactor,
-    };
-    
-    newSegments.push({ position: pos, radius: seg.radius });
     remainingLength--;
   }
 
