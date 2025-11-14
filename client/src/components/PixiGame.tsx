@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as PIXI from "pixi.js";
-import { useSnakeGame, type Snake, type Pellet, distance2D, normalize2D } from "@/lib/stores/useSnakeGame";
+import { useSnakeGame, type Snake, type Pellet, distance2D, normalize2D, SEGMENT_RADIUS, SEGMENT_OVERLAP } from "@/lib/stores/useSnakeGame";
 import GameUI from "./GameUI";
 
 /**
@@ -472,8 +472,8 @@ function updateSnakeMovement(
   const newSegments = [{ position: newHead, radius: snake.segments[0].radius }];
 
   let remainingLength = snake.length - 1;
-  // Each segment follows the previous one at a fixed distance (2.4 units for 20% overlap)
-  const segmentSpacing = 2.4;
+  // Calculate spacing dynamically: diameter * (1 - overlap)
+  const segmentSpacing = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP);
   for (let i = 0; i < snake.segments.length && remainingLength > 0; i++) {
     const seg = snake.segments[i];
     const dist = distance2D(newSegments[newSegments.length - 1].position, seg.position);
@@ -563,7 +563,8 @@ function updateAISnake(
   const newSegments = [{ position: newHead, radius: snake.segments[0].radius }];
 
   let remainingLength = snake.length - 1;
-  const segmentSpacing = 2.4;
+  // Calculate spacing dynamically: diameter * (1 - overlap)
+  const segmentSpacing = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP);
   for (let i = 0; i < snake.segments.length && remainingLength > 0; i++) {
     const seg = snake.segments[i];
     const dist = distance2D(newSegments[newSegments.length - 1].position, seg.position);
@@ -596,11 +597,12 @@ function updateAISnake(
 function checkPelletCollisions(snake: Snake, pellets: Pellet[]) {
   const collectedPellets: string[] = [];
   const head = snake.segments[0].position;
+  const headRadius = snake.segments[0].radius;
 
   for (const pellet of pellets) {
     const dist = distance2D(head, pellet.position);
-    // Collision radius: 1.5 units
-    if (dist < 1.5) {
+    // Collision when pellet is within head radius
+    if (dist < headRadius) {
       collectedPellets.push(pellet.id);
       snake.length += 1; // Grow snake by 1 segment
       snake.score += 1; // Increase score

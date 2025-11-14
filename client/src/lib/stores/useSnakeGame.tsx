@@ -75,6 +75,7 @@ interface SnakeGameState {
 const MAP_SIZE = 500;           // World is 500x500 units
 const INITIAL_SNAKE_LENGTH = 10;
 const SEGMENT_RADIUS = 1.5;
+const SEGMENT_OVERLAP = 0.2;    // 20% overlap between segments
 
 // Helper to generate random color from predefined palette
 const randomColor = () => {
@@ -125,8 +126,9 @@ const normalize2D = (point: Point2D): Point2D => {
 // Creates a new snake with initial segments positioned in a line
 const createSnake = (id: string, name: string, startX: number, startY: number): Snake => {
   const segments: SnakeSegment[] = [];
-  const segmentSpacing = 2.4; // 20% overlap (radius 1.5 * 2 = 3, spacing 2.4)
-  // Create segments from head to tail, each 2.4 units apart (moving left along X axis)
+  // Calculate spacing: diameter * (1 - overlap) = radius * 2 * (1 - overlap)
+  const segmentSpacing = SEGMENT_RADIUS * 2 * (1 - SEGMENT_OVERLAP);
+  // Create segments from head to tail, spaced to maintain consistent overlap
   for (let i = 0; i < INITIAL_SNAKE_LENGTH; i++) {
     segments.push({
       position: { x: startX - i * segmentSpacing, y: startY },
@@ -257,5 +259,5 @@ export const useSnakeGame = create<SnakeGameState>()(
   }))
 );
 
-// Export helper functions for use in game logic
-export { distance2D, normalize2D };
+// Export helper functions and constants for use in game logic
+export { distance2D, normalize2D, SEGMENT_RADIUS, SEGMENT_OVERLAP };
