@@ -131,25 +131,38 @@ export default function GameScene() {
     
     updateAISnakes(updatedAI);
     
-    // Update camera to follow player (top-down view)
+    // ===== CAMERA SYSTEM: Fixed top-down view with dynamic zoom =====
     if (newPlayerSnake.segments.length > 0) {
       const head = newPlayerSnake.segments[0].position;
-      const targetZoom = Math.max(6, Math.min(15, 6 + newPlayerSnake.length / 20));
       
-      // Keep camera directly above the player
+      // Calculate target zoom based on snake length
+      // Starts zoomed in (12) and zooms out as snake grows (minimum 4)
+      // Formula: higher zoom = more zoomed in, lower zoom = more zoomed out
+      const baseZoom = 12;  // Initial zoom when snake is small
+      const minZoom = 4;    // Maximum zoom out when snake is very long
+      const zoomScale = 0.1; // How quickly zoom changes with length
+      const targetZoom = Math.max(minZoom, baseZoom - (newPlayerSnake.length - 10) * zoomScale);
+      
+      // Smoothly move camera to follow snake head (only X and Z, Y stays fixed at 50)
       camera.position.x = THREE.MathUtils.lerp(camera.position.x, head.x, 0.1);
       camera.position.z = THREE.MathUtils.lerp(camera.position.z, head.z, 0.1);
+      camera.position.y = 50; // Fixed height above ground
       
-      // Always look at the player's position
-      camera.lookAt(head.x, 0, head.z);
+      // Fix camera rotation to always point straight down (prevents map rotation)
+      // -Math.PI/2 radians = -90 degrees, pointing down the Y axis
+      camera.rotation.set(-Math.PI / 2, 0, 0);
       
-      // Adjust zoom based on snake size
+      // Set camera up vector to prevent gimbal lock
+      camera.up.set(0, 0, -1);
+      
+      // Smoothly adjust zoom level
       if ('zoom' in camera) {
         (camera as THREE.OrthographicCamera).zoom = THREE.MathUtils.lerp(
           (camera as THREE.OrthographicCamera).zoom,
           targetZoom,
           0.05
         );
+        // Must update projection matrix after changing zoom
         camera.updateProjectionMatrix();
       }
     }
