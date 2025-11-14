@@ -499,22 +499,34 @@ function updateSnakeMovement(
     
     const dist = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
     
-    // Fallback for zero-length direction (segments on top of each other)
+    // Calculate the ideal target position (segmentSpacing away from previous)
+    let targetPos;
+    
     if (dist < 0.001) {
-      // Use snake's current direction as fallback
-      if (snake.direction.x !== 0 || snake.direction.y !== 0) {
-        dir = { x: snake.direction.x, y: snake.direction.y };
-      } else {
-        // Ultimate fallback: point right
-        dir = { x: 1, y: 0 };
-      }
+      // Segments on top of each other - use fallback direction
+      const fallbackDir = (snake.direction.x !== 0 || snake.direction.y !== 0) 
+        ? snake.direction 
+        : { x: 1, y: 0 };
+      const normalized = normalize2D(fallbackDir);
+      targetPos = {
+        x: prevPos.x + normalized.x * segmentSpacing,
+        y: prevPos.y + normalized.y * segmentSpacing,
+      };
+    } else {
+      // Normal case: place at segmentSpacing distance in current direction
+      const normalized = normalize2D(dir);
+      targetPos = {
+        x: prevPos.x + normalized.x * segmentSpacing,
+        y: prevPos.y + normalized.y * segmentSpacing,
+      };
     }
     
-    // Always place segment at exactly segmentSpacing distance
-    const normalized = normalize2D(dir);
+    // Smoothly interpolate towards target position for natural movement
+    // Use stronger interpolation when far from target, weaker when close
+    const lerpFactor = Math.min(0.5, dist / segmentSpacing);
     const pos = {
-      x: prevPos.x + normalized.x * segmentSpacing,
-      y: prevPos.y + normalized.y * segmentSpacing,
+      x: seg.position.x + (targetPos.x - seg.position.x) * lerpFactor,
+      y: seg.position.y + (targetPos.y - seg.position.y) * lerpFactor,
     };
     
     newSegments.push({ position: pos, radius: seg.radius });
@@ -601,22 +613,34 @@ function updateAISnake(
     
     const dist = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
     
-    // Fallback for zero-length direction (segments on top of each other)
+    // Calculate the ideal target position (segmentSpacing away from previous)
+    let targetPos;
+    
     if (dist < 0.001) {
-      // Use snake's current direction as fallback
-      if (snake.direction.x !== 0 || snake.direction.y !== 0) {
-        dir = { x: snake.direction.x, y: snake.direction.y };
-      } else {
-        // Ultimate fallback: point right
-        dir = { x: 1, y: 0 };
-      }
+      // Segments on top of each other - use fallback direction
+      const fallbackDir = (snake.direction.x !== 0 || snake.direction.y !== 0) 
+        ? snake.direction 
+        : { x: 1, y: 0 };
+      const normalized = normalize2D(fallbackDir);
+      targetPos = {
+        x: prevPos.x + normalized.x * segmentSpacing,
+        y: prevPos.y + normalized.y * segmentSpacing,
+      };
+    } else {
+      // Normal case: place at segmentSpacing distance in current direction
+      const normalized = normalize2D(dir);
+      targetPos = {
+        x: prevPos.x + normalized.x * segmentSpacing,
+        y: prevPos.y + normalized.y * segmentSpacing,
+      };
     }
     
-    // Always place segment at exactly segmentSpacing distance
-    const normalized = normalize2D(dir);
+    // Smoothly interpolate towards target position for natural movement
+    // Use stronger interpolation when far from target, weaker when close
+    const lerpFactor = Math.min(0.5, dist / segmentSpacing);
     const pos = {
-      x: prevPos.x + normalized.x * segmentSpacing,
-      y: prevPos.y + normalized.y * segmentSpacing,
+      x: seg.position.x + (targetPos.x - seg.position.x) * lerpFactor,
+      y: seg.position.y + (targetPos.y - seg.position.y) * lerpFactor,
     };
     
     newSegments.push({ position: pos, radius: seg.radius });
