@@ -1,8 +1,8 @@
 import "@fontsource/inter";
-import Game from "./components/Game";
+import PixiGame from "./components/PixiGame";
 
 function App() {
-  return <Game />;
+  return <PixiGame />;
 }
 
 export default App;

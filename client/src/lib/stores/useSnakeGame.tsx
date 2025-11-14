@@ -1,20 +1,25 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
-import * as THREE from "three";
 
 export type GamePhase = "menu" | "playing" | "gameover";
+
+// Simple 2D point for positions in the game world
+export interface Point2D {
+  x: number;
+  y: number;
+}
 
 // Represents a pellet (food) in the game world
 export interface Pellet {
   id: string;
-  position: THREE.Vector3;
+  position: Point2D;  // 2D position on the map
   color: string;
   size: number;
 }
 
 // Represents a single segment of a snake's body
 export interface SnakeSegment {
-  position: THREE.Vector3;
+  position: Point2D;  // 2D position
   radius: number;
 }
 
@@ -23,13 +28,13 @@ export interface Snake {
   id: string;
   name: string;
   segments: SnakeSegment[];  // Array of body segments, head is at index 0
-  direction: THREE.Vector3;  // Current movement direction (normalized vector)
-  speed: number;             // Units per second
+  direction: Point2D;  // Current movement direction (normalized vector)
+  speed: number;       // Units per second
   color: string;
-  length: number;            // Target length (grows when eating pellets)
-  score: number;             // Current score
+  length: number;      // Target length (grows when eating pellets)
+  score: number;       // Current score
   isDead: boolean;
-  isBoosting: boolean;       // Whether speed boost is active
+  isBoosting: boolean; // Whether speed boost is active
 }
 
 // Global game state managed by Zustand
@@ -39,16 +44,15 @@ interface SnakeGameState {
   aiSnakes: Snake[];
   pellets: Pellet[];
   mapSize: number;
-  // Mouse position in world coordinates (x, z) on the ground plane
-  // Updated via raycasting from screen coordinates
-  mouseWorldPosition: { x: number; z: number };
+  // Mouse position in world coordinates (simple 2D point)
+  mouseWorldPosition: Point2D;
   cameraZoom: number;
   
   // Actions
   startGame: () => void;
   endGame: () => void;
   restartGame: () => void;
-  updateMousePosition: (x: number, z: number) => void;
+  updateMousePosition: (x: number, y: number) => void;
   updatePlayerSnake: (snake: Snake) => void;
   updateAISnakes: (snakes: Snake[]) => void;
   updatePellets: (pellets: Pellet[]) => void;
@@ -73,13 +77,27 @@ const randomColor = () => {
   return colors[Math.floor(Math.random() * colors.length)];
 };
 
+// Helper to calculate distance between two 2D points
+const distance2D = (p1: Point2D, p2: Point2D): number => {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
+// Helper to normalize a 2D vector (make it length 1)
+const normalize2D = (point: Point2D): Point2D => {
+  const len = Math.sqrt(point.x * point.x + point.y * point.y);
+  if (len === 0) return { x: 0, y: 0 };
+  return { x: point.x / len, y: point.y / len };
+};
+
 // Creates a new snake with initial segments positioned in a line
-const createSnake = (id: string, name: string, startX: number, startZ: number): Snake => {
+const createSnake = (id: string, name: string, startX: number, startY: number): Snake => {
   const segments: SnakeSegment[] = [];
-  // Create segments from head to tail, each 1 unit apart
+  // Create segments from head to tail, each 1 unit apart (moving left along X axis)
   for (let i = 0; i < INITIAL_SNAKE_LENGTH; i++) {
     segments.push({
-      position: new THREE.Vector3(startX - i * 1, 0, startZ),
+      position: { x: startX - i * 1, y: startY },
       radius: SEGMENT_RADIUS,
     });
   }
@@ -88,8 +106,8 @@ const createSnake = (id: string, name: string, startX: number, startZ: number): 
     id,
     name,
     segments,
-    // Initialize with no movement (0,0,0) to prevent drift until mouse moves
-    direction: new THREE.Vector3(0, 0, 0),
+    // Initialize with no movement (0,0) to prevent drift until mouse moves
+    direction: { x: 0, y: 0 },
     speed: 5,
     color: randomColor(),
     length: INITIAL_SNAKE_LENGTH,
@@ -106,8 +124,8 @@ export const useSnakeGame = create<SnakeGameState>()(
     aiSnakes: [],
     pellets: [],
     mapSize: MAP_SIZE,
-    mouseWorldPosition: { x: 0, z: 0 },
-    cameraZoom: 30,
+    mouseWorldPosition: { x: 0, y: 0 },
+    cameraZoom: 12,
     
     startGame: () => {
       // Create player snake at origin (center of map)
@@ -121,8 +139,8 @@ export const useSnakeGame = create<SnakeGameState>()(
         const angle = (i / 7) * Math.PI * 2;
         const distance = 50 + Math.random() * 30;
         const x = Math.cos(angle) * distance;
-        const z = Math.sin(angle) * distance;
-        aiSnakes.push(createSnake(`ai-${i}`, aiNames[i], x, z));
+        const y = Math.sin(angle) * distance;
+        aiSnakes.push(createSnake(`ai-${i}`, aiNames[i], x, y));
       }
       
       // Spawn 500 pellets randomly across the map
@@ -130,11 +148,10 @@ export const useSnakeGame = create<SnakeGameState>()(
       for (let i = 0; i < 500; i++) {
         pellets.push({
           id: `pellet-${i}`,
-          position: new THREE.Vector3(
-            (Math.random() - 0.5) * MAP_SIZE,  // Random X between -100 and 100
-            0,
-            (Math.random() - 0.5) * MAP_SIZE   // Random Z between -100 and 100
-          ),
+          position: {
+            x: (Math.random() - 0.5) * MAP_SIZE,  // Random X between -100 and 100
+            y: (Math.random() - 0.5) * MAP_SIZE   // Random Y between -100 and 100
+          },
           color: randomColor(),
           size: 0.3,
         });
@@ -163,8 +180,8 @@ export const useSnakeGame = create<SnakeGameState>()(
       setTimeout(() => startGame(), 100);
     },
     
-    updateMousePosition: (x: number, z: number) => {
-      set({ mouseWorldPosition: { x, z } });
+    updateMousePosition: (x: number, y: number) => {
+      set({ mouseWorldPosition: { x, y } });
     },
     
     updatePlayerSnake: (snake: Snake) => {
@@ -207,3 +224,6 @@ export const useSnakeGame = create<SnakeGameState>()(
     },
   }))
 );
+
+// Export helper functions for use in game logic
+export { distance2D, normalize2D };
