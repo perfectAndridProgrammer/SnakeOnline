@@ -21,22 +21,26 @@ export default function GameScene() {
   const setPlayerBoosting = useSnakeGame((state) => state.setPlayerBoosting);
   
   const keysPressed = useRef<Set<string>>(new Set());
+  // Raycaster for converting screen coordinates to world coordinates
   const raycaster = useRef(new THREE.Raycaster());
+  // Ground plane at y=0 for raycasting intersection
   const plane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
   
-  // Track mouse movement
+  // Track mouse movement and convert to world coordinates
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      // Convert screen coordinates to normalized device coordinates
+      // Convert screen coordinates to normalized device coordinates (-1 to +1)
       const x = (e.clientX / window.innerWidth) * 2 - 1;
       const y = -(e.clientY / window.innerHeight) * 2 + 1;
       
-      // Use raycasting to get world position
+      // Use raycasting to project mouse position onto the ground plane (y=0)
+      // This converts 2D screen coordinates to 3D world coordinates
       raycaster.current.setFromCamera(new THREE.Vector2(x, y), camera);
       const intersection = new THREE.Vector3();
       raycaster.current.ray.intersectPlane(plane.current, intersection);
       
       if (intersection) {
+        // Store world coordinates (x, z) for snake movement
         useSnakeGame.getState().updateMousePosition(intersection.x, intersection.z);
       }
     };
@@ -60,23 +64,23 @@ export default function GameScene() {
     };
   }, [camera]);
   
-  // Game loop
+  // Main game loop - runs every frame at 60fps
   useFrame((state, delta) => {
     if (!playerSnake) return;
     
-    // Check for boost
+    // Check if player is boosting (holding spacebar)
     const isBoosting = keysPressed.current.has('Space');
     if (isBoosting !== playerSnake.isBoosting) {
       setPlayerBoosting(isBoosting);
     }
     
-    // Update player snake
+    // Update player snake position based on mouse cursor
     const updatedPlayer = updateSnakeMovement(playerSnake, mouseWorldPosition, delta, isBoosting, pellets, mapSize);
     
-    // Check pellet collisions for player
+    // Check if player collected any pellets
     const { snake: newPlayerSnake, collectedPellets } = checkPelletCollisions(updatedPlayer, pellets);
     
-    // Remove collected pellets and spawn new ones
+    // Replace collected pellets with new ones to maintain pellet count
     collectedPellets.forEach((pelletId) => {
       removePellet(pelletId);
       // Spawn new pellet at random location
@@ -92,7 +96,7 @@ export default function GameScene() {
       });
     });
     
-    // Check if player hit another snake
+    // Check if player collided with any AI snakes (game over)
     const playerHitSnake = checkSnakeCollisions(newPlayerSnake, aiSnakes);
     if (playerHitSnake) {
       endGame();
@@ -101,7 +105,7 @@ export default function GameScene() {
     
     updatePlayerSnake(newPlayerSnake);
     
-    // Update AI snakes and collect pellets
+    // Update AI snakes and handle their pellet collection
     const aiCollectedPellets: string[] = [];
     const updatedAI = aiSnakes.map((aiSnake) => {
       const updated = updateAISnake(aiSnake, delta, pellets, mapSize, newPlayerSnake, aiSnakes);
@@ -110,7 +114,7 @@ export default function GameScene() {
       return finalSnake;
     });
     
-    // Remove AI collected pellets and spawn new ones
+    // Replace AI collected pellets with new ones
     aiCollectedPellets.forEach((pelletId) => {
       removePellet(pelletId);
       addPellet({
@@ -175,6 +179,7 @@ function getRandomColor(): string {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
+// Updates snake position and direction based on target or AI logic
 function updateSnakeMovement(
   snake: any,
   mouseWorldPosition: { x: number; z: number },
@@ -187,9 +192,9 @@ function updateSnakeMovement(
   
   const head = snake.segments[0].position.clone();
   
-  // Calculate direction from mouse world position (only for player)
+  // Player snake follows mouse cursor
   if (snake.id === "player") {
-    // mouseWorldPosition contains actual world coordinates (x, z)
+    // Calculate vector from snake head to mouse position
     const targetDir = new THREE.Vector3(
       mouseWorldPosition.x - head.x,
       0,
@@ -198,46 +203,50 @@ function updateSnakeMovement(
     
     const distanceToMouse = targetDir.length();
     
-    // Only update direction if mouse is far enough from head (1 unit minimum)
+    // Dead zone: only move if mouse is >1 unit away from head
+    // This prevents jittery movement and allows the snake to "catch up" to the cursor
     if (distanceToMouse > 1.0) {
       snake.direction = targetDir.normalize();
     } else {
-      // If mouse is very close, stop moving
+      // Stop moving when cursor is very close (prevents drift)
       snake.direction = new THREE.Vector3(0, 0, 0);
     }
   }
   
-  // Apply speed boost
+  // Apply speed boost (2x speed when spacebar is held)
   const speed = isBoosting ? snake.speed * 2 : snake.speed;
   const moveDistance = speed * delta;
   
-  // Move head
+  // Calculate new head position by moving in current direction
   const newHead = head.add(snake.direction.clone().multiplyScalar(moveDistance));
   
-  // Keep snake within bounds
+  // Clamp snake within map boundaries
   newHead.x = Math.max(-mapSize / 2, Math.min(mapSize / 2, newHead.x));
   newHead.z = Math.max(-mapSize / 2, Math.min(mapSize / 2, newHead.z));
   
-  // Update segments
+  // Update all body segments to follow the head
   const newSegments = [{ position: newHead, radius: snake.segments[0].radius }];
   
   let remainingLength = snake.length - 1;
+  // Each segment follows the previous one at a fixed distance (1 unit)
   for (let i = 0; i < snake.segments.length && remainingLength > 0; i++) {
     const seg = snake.segments[i];
     const distance = newSegments[newSegments.length - 1].position.distanceTo(seg.position);
     
     if (distance > 1) {
+      // Move segment closer to maintain 1 unit spacing
       const dir = seg.position.clone().sub(newSegments[newSegments.length - 1].position).normalize();
       const pos = newSegments[newSegments.length - 1].position.clone().add(dir.multiplyScalar(1));
       newSegments.push({ position: pos, radius: seg.radius });
       remainingLength--;
     } else if (distance > 0.1) {
+      // Keep segment at current position if close enough
       newSegments.push({ position: seg.position.clone(), radius: seg.radius });
       remainingLength--;
     }
   }
   
-  // If boosting, consume length
+  // Boosting consumes snake length (minimum length of 10)
   if (isBoosting && snake.id === "player" && snake.length > 10) {
     snake.length = Math.max(10, snake.length - delta * 2);
   }
@@ -249,6 +258,7 @@ function updateSnakeMovement(
   };
 }
 
+// AI behavior: seeks nearby pellets, wanders randomly if none found
 function updateAISnake(
   snake: any,
   delta: number,
@@ -261,12 +271,13 @@ function updateAISnake(
   
   const head = snake.segments[0].position;
   
-  // Simple AI: move toward nearest pellet
+  // AI seeks nearest pellet within range (optimized to check only first 50 pellets)
   let targetPos = null;
   let minDist = Infinity;
   
   for (const pellet of pellets.slice(0, 50)) {
     const dist = head.distanceTo(pellet.position);
+    // Only target pellets within 30 units
     if (dist < minDist && dist < 30) {
       minDist = dist;
       targetPos = pellet.position;
@@ -274,6 +285,7 @@ function updateAISnake(
   }
   
   if (targetPos) {
+    // Move toward target pellet
     const direction = new THREE.Vector3(
       targetPos.x - head.x,
       0,
@@ -281,7 +293,7 @@ function updateAISnake(
     ).normalize();
     snake.direction = direction;
   } else {
-    // Random movement
+    // No pellets nearby: wander randomly (2% chance per frame to change direction)
     if (Math.random() < 0.02) {
       const angle = Math.random() * Math.PI * 2;
       snake.direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
@@ -319,42 +331,47 @@ function updateAISnake(
   };
 }
 
+// Checks if snake head collides with any pellets and grows the snake
 function checkPelletCollisions(snake: any, pellets: any[]) {
   const collectedPellets: string[] = [];
   const head = snake.segments[0].position;
   
   for (const pellet of pellets) {
     const distance = head.distanceTo(pellet.position);
+    // Collision radius: 1.5 units
     if (distance < 1.5) {
       collectedPellets.push(pellet.id);
-      snake.length += 1;
-      snake.score += 1;
+      snake.length += 1;  // Grow snake by 1 segment
+      snake.score += 1;   // Increase score
     }
   }
   
   return { snake, collectedPellets };
 }
 
+// Checks if player snake collides with AI snakes or itself (game over condition)
 function checkSnakeCollisions(playerSnake: any, aiSnakes: any[]): boolean {
   const head = playerSnake.segments[0].position;
   
-  // Check collision with AI snakes
+  // Check collision with AI snake bodies
   for (const aiSnake of aiSnakes) {
+    // Start checking from segment 3 to avoid head-to-head collisions
     for (let i = 3; i < aiSnake.segments.length; i++) {
       const segment = aiSnake.segments[i];
       const distance = head.distanceTo(segment.position);
       if (distance < 1) {
-        return true;
+        return true; // Game over
       }
     }
   }
   
-  // Check self collision
+  // Check self-collision (hitting own tail)
+  // Start from segment 5 to allow tight turns
   for (let i = 5; i < playerSnake.segments.length; i++) {
     const segment = playerSnake.segments[i];
     const distance = head.distanceTo(segment.position);
     if (distance < 0.8) {
-      return true;
+      return true; // Game over
     }
   }
   
