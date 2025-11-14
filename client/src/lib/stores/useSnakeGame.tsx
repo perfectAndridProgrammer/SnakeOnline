@@ -125,10 +125,11 @@ const normalize2D = (point: Point2D): Point2D => {
 // Creates a new snake with initial segments positioned in a line
 const createSnake = (id: string, name: string, startX: number, startY: number): Snake => {
   const segments: SnakeSegment[] = [];
-  // Create segments from head to tail, each 1 unit apart (moving left along X axis)
+  const segmentSpacing = 2.4; // 20% overlap (radius 1.5 * 2 = 3, spacing 2.4)
+  // Create segments from head to tail, each 2.4 units apart (moving left along X axis)
   for (let i = 0; i < INITIAL_SNAKE_LENGTH; i++) {
     segments.push({
-      position: { x: startX - i * 1, y: startY },
+      position: { x: startX - i * segmentSpacing, y: startY },
       radius: SEGMENT_RADIUS,
     });
   }

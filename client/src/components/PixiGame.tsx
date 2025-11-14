@@ -472,21 +472,22 @@ function updateSnakeMovement(
   const newSegments = [{ position: newHead, radius: snake.segments[0].radius }];
 
   let remainingLength = snake.length - 1;
-  // Each segment follows the previous one at a fixed distance (1 unit)
+  // Each segment follows the previous one at a fixed distance (2.4 units for 20% overlap)
+  const segmentSpacing = 2.4;
   for (let i = 0; i < snake.segments.length && remainingLength > 0; i++) {
     const seg = snake.segments[i];
     const dist = distance2D(newSegments[newSegments.length - 1].position, seg.position);
 
-    if (dist > 1) {
-      // Move segment closer to maintain 1 unit spacing
+    if (dist > segmentSpacing) {
+      // Move segment closer to maintain spacing
       const dir = {
         x: seg.position.x - newSegments[newSegments.length - 1].position.x,
         y: seg.position.y - newSegments[newSegments.length - 1].position.y,
       };
       const normalized = normalize2D(dir);
       const pos = {
-        x: newSegments[newSegments.length - 1].position.x + normalized.x * 1,
-        y: newSegments[newSegments.length - 1].position.y + normalized.y * 1,
+        x: newSegments[newSegments.length - 1].position.x + normalized.x * segmentSpacing,
+        y: newSegments[newSegments.length - 1].position.y + normalized.y * segmentSpacing,
       };
       newSegments.push({ position: pos, radius: seg.radius });
       remainingLength--;
@@ -562,19 +563,20 @@ function updateAISnake(
   const newSegments = [{ position: newHead, radius: snake.segments[0].radius }];
 
   let remainingLength = snake.length - 1;
+  const segmentSpacing = 2.4;
   for (let i = 0; i < snake.segments.length && remainingLength > 0; i++) {
     const seg = snake.segments[i];
     const dist = distance2D(newSegments[newSegments.length - 1].position, seg.position);
 
-    if (dist > 1) {
+    if (dist > segmentSpacing) {
       const dir = {
         x: seg.position.x - newSegments[newSegments.length - 1].position.x,
         y: seg.position.y - newSegments[newSegments.length - 1].position.y,
       };
       const normalized = normalize2D(dir);
       const pos = {
-        x: newSegments[newSegments.length - 1].position.x + normalized.x * 1,
-        y: newSegments[newSegments.length - 1].position.y + normalized.y * 1,
+        x: newSegments[newSegments.length - 1].position.x + normalized.x * segmentSpacing,
+        y: newSegments[newSegments.length - 1].position.y + normalized.y * segmentSpacing,
       };
       newSegments.push({ position: pos, radius: seg.radius });
       remainingLength--;
@@ -611,6 +613,7 @@ function checkPelletCollisions(snake: Snake, pellets: Pellet[]) {
 // Checks if player snake collides with AI snakes or itself
 function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
   const head = playerSnake.segments[0].position;
+  const headRadius = playerSnake.segments[0].radius;
 
   // Check collision with AI snake bodies
   for (const aiSnake of aiSnakes) {
@@ -618,7 +621,8 @@ function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
     for (let i = 3; i < aiSnake.segments.length; i++) {
       const segment = aiSnake.segments[i];
       const dist = distance2D(head, segment.position);
-      if (dist < 1) {
+      // Collision when distance is less than sum of radii (circles touching)
+      if (dist < headRadius + segment.radius) {
         return true; // Game over
       }
     }
@@ -628,7 +632,8 @@ function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
   for (let i = 5; i < playerSnake.segments.length; i++) {
     const segment = playerSnake.segments[i];
     const dist = distance2D(head, segment.position);
-    if (dist < 0.8) {
+    // Collision when distance is less than sum of radii
+    if (dist < headRadius + segment.radius) {
       return true; // Game over
     }
   }
