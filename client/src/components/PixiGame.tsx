@@ -616,6 +616,10 @@ function checkPelletCollisions(snake: Snake, pellets: Pellet[]) {
 function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
   const head = playerSnake.segments[0].position;
   const headRadius = playerSnake.segments[0].radius;
+  
+  // Collision threshold: circles overlap more than the allowed segment overlap
+  // We allow 20% overlap normally, so collision happens at ~60% overlap (more aggressive)
+  const collisionThreshold = headRadius * 0.8;
 
   // Check collision with AI snake bodies
   for (const aiSnake of aiSnakes) {
@@ -623,8 +627,9 @@ function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
     for (let i = 3; i < aiSnake.segments.length; i++) {
       const segment = aiSnake.segments[i];
       const dist = distance2D(head, segment.position);
-      // Collision when distance is less than sum of radii (circles touching)
-      if (dist < headRadius + segment.radius) {
+      // Collision when head center is very close to segment center
+      if (dist < collisionThreshold) {
+        console.log(`Collision with AI snake ${aiSnake.name} segment ${i}, dist: ${dist.toFixed(2)}`);
         return true; // Game over
       }
     }
@@ -634,8 +639,9 @@ function checkSnakeCollisions(playerSnake: Snake, aiSnakes: Snake[]): boolean {
   for (let i = 5; i < playerSnake.segments.length; i++) {
     const segment = playerSnake.segments[i];
     const dist = distance2D(head, segment.position);
-    // Collision when distance is less than sum of radii
-    if (dist < headRadius + segment.radius) {
+    // Collision when head center is very close to tail segment center
+    if (dist < collisionThreshold) {
+      console.log(`Self-collision with segment ${i}, dist: ${dist.toFixed(2)}`);
       return true; // Game over
     }
   }
