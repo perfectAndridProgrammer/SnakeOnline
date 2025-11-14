@@ -72,9 +72,9 @@ interface SnakeGameState {
 }
 
 // Game constants
-const MAP_SIZE = 200;           // World is 200x200 units
+const MAP_SIZE = 500;           // World is 500x500 units
 const INITIAL_SNAKE_LENGTH = 10;
-const SEGMENT_RADIUS = 0.5;
+const SEGMENT_RADIUS = 1.5;
 
 // Helper to generate random color from predefined palette
 const randomColor = () => {

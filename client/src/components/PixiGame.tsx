@@ -61,6 +61,9 @@ export default function PixiGame() {
       const keysPressed = new Set<string>();
       let debugMode = false;
       
+      // Track if initial zoom-in has completed
+      let initialZoomComplete = false;
+      
       // ===== INPUT HANDLERS =====
       const handleKeyDown = (e: KeyboardEvent) => {
         keysPressed.add(e.code);
@@ -146,7 +149,7 @@ export default function PixiGame() {
             pellets: state.pellets.length,
             aiSnakes: state.aiSnakes.length,
             fps: app.ticker.FPS.toFixed(1),
-            deltaTime: ticker.deltaTime.toFixed(3)
+            deltaTime: app.ticker.deltaTime.toFixed(3)
           });
           
           console.groupEnd();
@@ -252,9 +255,9 @@ export default function PixiGame() {
           
           // Calculate zoom based on snake length
           // Higher values = more zoomed in = objects appear larger
-          // Scale of 3-4 gives a good balance between seeing the map and detail
-          const baseZoom = 4.0;    // Initial zoom (nice close-up view)
-          const minZoom = 2.5;     // Maximum zoom out (still keep things visible)
+          // Scale of 4-8 gives a good balance between seeing the map and detail
+          const baseZoom = 8.0;    // Initial zoom (nice close-up view)
+          const minZoom = 4.0;     // Maximum zoom out (still keep things visible)
           const zoomScale = 0.015; // How quickly zoom changes with length
           const targetZoom = Math.max(
             minZoom,
@@ -271,8 +274,18 @@ export default function PixiGame() {
           gameContainer.position.set(app.screen.width / 2, app.screen.height / 2);
           
           // Smoothly adjust zoom level
-          gameContainer.scale.x += (targetZoom - gameContainer.scale.x) * 0.05;
-          gameContainer.scale.y += (targetZoom - gameContainer.scale.y) * 0.05;
+          // Use slower lerp initially (0.001), then faster (0.05) after reaching target
+          const zoomDifference = Math.abs(targetZoom - gameContainer.scale.x);
+          
+          // Consider initial zoom complete when within 0.1 of target zoom
+          if (!initialZoomComplete && zoomDifference < 0.1) {
+            initialZoomComplete = true;
+          }
+          
+          // Use slow zoom initially, fast zoom after
+          const zoomLerpFactor = initialZoomComplete ? 0.05 : 0.001;
+          gameContainer.scale.x += (targetZoom - gameContainer.scale.x) * zoomLerpFactor;
+          gameContainer.scale.y += (targetZoom - gameContainer.scale.y) * zoomLerpFactor;
         }
 
         // ===== RENDER ALL GAME OBJECTS =====
